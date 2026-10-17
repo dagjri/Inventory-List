@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="動画コレクション管理アプリ。追加・編集・削除・検索ができます。">
+<title>持ってるやつ一覧</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>持ってるやつ一覧</h1>
+    <p class="subtitle">動画コレクション管理アプリ</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="toolbar" aria-label="データ操作">
+    <button id="btn-add" class="btn btn-primary" type="button">＋ 追加</button>
+    <button id="btn-export-json" class="btn" type="button">JSON書き出し</button>
+    <button id="btn-export-yaml" class="btn" type="button">YAML書き出し</button>
+    <button id="btn-import" class="btn" type="button">ファイル読み込み</button>
+    <input id="import-file" type="file" accept=".json,.yml,.yaml" hidden>
+  </section>
+
+  <section class="controls" aria-label="検索と絞り込み">
+    <label class="control control-search">
+      <span>キーワード</span>
+      <input id="q" type="search" placeholder="タイトル・メモ・出演者で検索…" autocomplete="off">
+    </label>
+    <label class="control">
+      <span>グループ</span>
+      <select id="filter-group"><option value="">すべて</option></select>
+    </label>
+    <label class="control">
+      <span>個人</span>
+      <select id="filter-person"><option value="">すべて</option></select>
+    </label>
+    <label class="control">
+      <span>ジャンル</span>
+      <select id="filter-genre"><option value="">すべて</option></select>
+    </label>
+    <label class="control">
+      <span>ステータス</span>
+      <select id="filter-status">
+        <option value="">すべて</option>
+        <option value="未視聴">未視聴</option>
+        <option value="視聴済み">視聴済み</option>
+        <option value="お気に入り">お気に入り</option>
+      </select>
+    </label>
+    <label class="control">
+      <span>並び順</span>
+      <select id="sort">
+        <option value="added">追加順</option>
+        <option value="name">名前(あ→ん)</option>
+      </select>
+    </label>
+    <button id="reset" type="button" class="btn-reset">リセット</button>
+  </section>
+
+  <p id="count" class="count"></p>
+
+  <div id="loading" class="state">読み込み中…</div>
+  <div id="error" class="state state-error" hidden></div>
+  <p id="empty" class="state" hidden>該当する項目がありません。</p>
+
+  <div id="tableWrap" hidden>
+    <table class="list">
+      <thead>
+        <tr>
+          <th>名前</th>
+          <th>出演者</th>
+          <th>グループ</th>
+          <th>ジャンル</th>
+          <th>ステータス</th>
+          <th>画質</th>
+          <th>メモ</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div id="cards" class="cards" hidden></div>
+
+  <details class="howto">
+    <summary>このアプリの使い方</summary>
+    <ul>
+      <li><b>追加</b>:「＋ 追加」からフォームに入力して保存します。</li>
+      <li><b>編集</b>:一覧の行をクリック →「編集」ボタン。</li>
+      <li><b>削除</b>:詳細画面の「削除」を<b>2回</b>押すと削除されます(誤操作防止)。</li>
+      <li><b>検索・絞り込み</b>:キーワード + グループ/個人/ジャンル/ステータスを自由に組み合わせ。</li>
+      <li><b>保存場所</b>:変更はこのブラウザ内に自動保存されます(端末ごとに独立)。別の端末へ移すときは「JSON書き出し」→ 相手の端末で「ファイル読み込み」。</li>
+      <li>「YAML書き出し」で初期データ用の <code>videos.yml</code> 形式でも書き出せます。</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>データはブラウザ内(localStorage)に保存されます。バックアップは「JSON書き出し」から</p>
+    <p><button id="btn-reset-data" class="btn-link" type="button">初期データに戻す</button></p>
+  </div>
+</footer>
+
+<!-- 詳細モーダル -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="detail"></div>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="modal-close" type="button" data-close="detail" aria-label="閉じる">×</button>
+    <div id="modal-body"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-danger" id="btn-delete">削除</button>
+      <button type="button" class="btn" id="btn-edit">編集</button>
+      <button type="button" class="btn btn-primary" data-close="detail">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 追加・編集フォーム -->
+<div id="form-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="form"></div>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="modal-close" type="button" data-close="form" aria-label="閉じる">×</button>
+    <h2 id="form-title">項目を追加</h2>
+    <form id="entry-form" novalidate>
+      <div class="form-grid">
+        <label class="form-field field-full"><span>名前 <em>必須</em></span>
+          <input id="f-name" type="text" required>
+        </label>
+        <label class="form-field"><span>出演者(表示用)</span>
+          <input id="f-cast" type="text" list="dl-cast" placeholder="なにわ男子　全員, SixTONES　全員">
+        </label>
+        <label class="form-field"><span>ステータス</span>
+          <select id="f-status"></select>
+        </label>
+        <label class="form-field"><span>グループ</span>
+          <input id="f-group" type="text" list="dl-group" placeholder="なにわ男子, 関西Jr.">
+        </label>
+        <label class="form-field"><span>個人</span>
+          <input id="f-person" type="text" list="dl-person" placeholder="西畑大吾, 大西流星">
+        </label>
+        <label class="form-field"><span>ジャンル</span>
+          <input id="f-genre" type="text" list="dl-genre" placeholder="バラエティ, ドラマ">
+        </label>
+        <label class="form-field"><span>画質</span>
+          <input id="f-quality" type="text" list="dl-quality" placeholder="1920×1080">
+        </label>
+        <label class="form-field"><span>タグ(任意)</span>
+          <input id="f-tags" type="text" list="dl-tags" placeholder="無料, 借り物 など自由に">
+        </label>
+        <label class="form-field field-full"><span>動画URL(任意)</span>
+          <input id="f-url" type="url" placeholder="https://…">
+        </label>
+        <label class="form-field field-full"><span>メモ</span>
+          <textarea id="f-memo" rows="3"></textarea>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="form-cancel">キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="form-save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 確認モーダル(読み込み・初期化用) -->
+<div id="confirm-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="confirm"></div>
+  <div class="modal-card modal-card-sm" role="dialog" aria-modal="true">
+    <p id="confirm-text"></p>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="confirm-cancel">キャンセル</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok">実行</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<noscript><p class="state state-error">このアプリの表示にはJavaScriptを有効にしてください。</p></noscript>
+
+<datalist id="dl-cast"></datalist>
+<datalist id="dl-group"></datalist>
+<datalist id="dl-person"></datalist>
+<datalist id="dl-genre"></datalist>
+<datalist id="dl-quality"></datalist>
+<datalist id="dl-tags"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
